@@ -1,6 +1,6 @@
 ﻿#include <memory>
 #include <iostream>
-
+#include <omp.h>
 
 class Mass {
 public:
@@ -227,6 +227,7 @@ public:
 			std::cout << "＋－";
 		}
 		std::cout << "＋\n";
+        
 		for (int y = 0; y < BOARD_SIZE; y++) {
 			std::cout << " " << char('a' + y);
 			for (int x = 0; x < BOARD_SIZE; x++) {
@@ -280,8 +281,9 @@ int AI_nega_max::evaluate(Board& b, Mass::status current, int& best_x, int& best
 	if (r == Board::DRAW) return 0;// 引分け
 
 	int score_max = -10001;// 打たないのは最悪
-
+    #pragma omp parallel for
 	for (int y = 0; y < Board::BOARD_SIZE; y++) {
+      #pragma omp parallel for
 		for (int x = 0; x < Board::BOARD_SIZE; x++) {
 			Mass& m = b.mass_[y][x];
 			if (m.getStatus() != Mass::BLANK) continue;
@@ -329,7 +331,7 @@ int AI_alpha_beta::evaluate(int alpha, int beta, Board& b, Mass::status current,
 	if (r == Board::DRAW) return 0;// 引分け
 
 	int score_max = -9999;// 打たないで投了
-
+  
 	for (int y = 0; y < Board::BOARD_SIZE; y++) {
 		for (int x = 0; x < Board::BOARD_SIZE; x++) {
 			Mass& m = b.mass_[y][x];
@@ -376,8 +378,9 @@ int AI_nega_scout::evaluate(int limit, int alpha, int beta, Board& board, Mass::
 	if (r == Board::DRAW) return 0;// 引分け
 
 	int a = alpha, b = beta;
-
+ 
 	for (int y = 0; y < Board::BOARD_SIZE; y++) {
+
 		for (int x = 0; x < Board::BOARD_SIZE; x++) {
 			Mass& m = board.mass_[y][x];
 			if (m.getStatus() != Mass::BLANK) continue;
@@ -432,7 +435,9 @@ int AI_monte_carlo::evaluate(bool fiest_time, Board& board, Mass::status current
 	int loses[Board::BOARD_SIZE * Board::BOARD_SIZE];// 敗北数
 	int blank_mass_num = 0;
 	// 空いているマスの数を数え、配列として位置を確保する
+    #pragma omp parallel for
 	for (int y = 0; y < Board::BOARD_SIZE; y++) {
+       #pragma omp parallel for
 		for (int x = 0; x < Board::BOARD_SIZE; x++) {
 			Mass& m = board.mass_[y][x];
 			if (m.getStatus() == Mass::BLANK) {
@@ -445,6 +450,7 @@ int AI_monte_carlo::evaluate(bool fiest_time, Board& board, Mass::status current
 	}
 	if (fiest_time) {
 		// 一番上の階層でランダムに指すのを繰り返す
+        #pragma omp parallel for
 		for (int i = 0; i < 10000; i++) {
 			int idx = rand() % blank_mass_num;
 			Mass& m = board.mass_[y_table[idx]][x_table[idx]];
@@ -472,7 +478,7 @@ int AI_monte_carlo::evaluate(bool fiest_time, Board& board, Mass::status current
 				best_x = x_table[idx];
 				best_y = y_table[idx];
 			}
-			//			std::cout << x_table[idx] + 1 << (char)('a' + y_table[idx]) << " " << score << "% (win:" << wins[idx] << ", lose:" << loses[idx] << ")" << std::endl;
+			//std::cout << x_table[idx] + 1 << (char)('a' + y_table[idx]) << " " << score << "% (win:" << wins[idx] << ", lose:" << loses[idx] << ")" << std::endl;
 		}
 
 		return score_max;
@@ -510,6 +516,7 @@ int AI_montecarlo_tree::select_mass(int n, int* a_count, int* a_wins)
 	if (total <= 0) return -1;
 
 	int r = rand() % total;
+
 	for (int i = 0; i < n; i++) {
 		r -= 10000 * (a_wins[i] + 1) / (a_count[i] + 1);
 		if (r < 0) {
@@ -568,7 +575,7 @@ int AI_montecarlo_tree::evaluate(bool all_search, int sim_count, Board& board, M
 				count[idx]++;
 			}
 			// 閾値を超えれば、木を成長させる
-			if (sim_count / 10 < count[idx] // 閾値は10％以上の探索回数
+			if (sim_count / 30 < count[idx] // 閾値は10％以上の探索回数
 				&& 10 < sim_count) {// 回数が少ないときはランダムの精度が下がるので、成長させない
 				m.setStatus(current);// 次の手を打つ
 				scores[idx] = 100 - evaluate(true, (int)sqrt(sim_count), board, next, dummy, dummy);
@@ -594,7 +601,7 @@ int AI_montecarlo_tree::evaluate(bool all_search, int sim_count, Board& board, M
 				best_x = x_table[idx];
 				best_y = y_table[idx];
 			}
-			std::cout << x_table[idx] + 1 << (char)('a' + y_table[idx]) << " " << score << "% (win:" << wins[idx] << ", count:" << count[idx] << ")" << std::endl;
+			//std::cout << x_table[idx] + 1 << (char)('a' + y_table[idx]) << " " << score << "% (win:" << wins[idx] << ", count:" << count[idx] << ")" << std::endl;
 		}
 
 		return score_max;
@@ -662,9 +669,6 @@ public:
 	}
 };
 
-
-
-
 void show_start_message()
 {
 	std::cout << "========================" << std::endl;
@@ -691,14 +695,18 @@ void show_end_message(Board::WINNER winner)
 
 int main()
 {
-	for (;;) {// 無限ループ
-		show_start_message();
+	while (true)// 無限ループ
+	{
+		
+		//show_start_message();
 
 		// initialize
 		unsigned int turn = 0;
 		std::shared_ptr<Game> game(new Game());
 
 		while (1) {
+			system("cls");
+			show_start_message();
 			game->show();// 盤面表示
 
 			// 勝利判定
@@ -726,6 +734,7 @@ int main()
 			// プレイヤーとAIの切り替え
 			turn = 1 - turn;
 		}
+		system("PAUSE");
 	}
 
 	return 0;
